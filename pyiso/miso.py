@@ -22,6 +22,7 @@ class MISOClient(BaseClient):
         'Nuclear': 'nuclear',
         'Other': 'other',
         'Wind': 'wind',
+        'Solar': 'solar',
     }
 
     # MISO is always on utc offset is -5
