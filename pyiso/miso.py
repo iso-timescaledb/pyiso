@@ -4,6 +4,7 @@ from pyiso import LOGGER
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
+import json
 
 IntervalChoices = namedtuple('IntervalChoices',
                              ['hourly', 'hourly_prelim', 'fivemin', 'tenmin',
@@ -111,6 +112,42 @@ class MISOClient(BaseClient):
 
         # return good
         return response.content
+
+    def get_latest_ace(self):
+        # set up request
+        url = self.base_url + '?messageType=getACE&returnType=json'
+
+        # carry out request
+        response = self.request(url)
+        if not response:
+            return None
+
+        # test for valid content
+        if 'The page cannot be displayed' in response.text:
+            LOGGER.error('MISO: Error in source data for ACE')
+            return None
+        ace = json.loads(response.content)
+
+        # return good
+        data = self.parse_ace_dict(ace['ACE'])
+        return self.serialize_faster(data)
+    
+    def parse_ace_dict(self, content):
+        if not content:
+            return pd.DataFrame()
+
+        # preliminary parsing
+        df = pd.DataFrame(content,columns = ['instantEST','value'])
+        df['instantEST']= pd.to_datetime(df['instantEST'])
+        df.set_index('instantEST', inplace = True)
+        # set index
+        try:
+            df.index = self.utcify_index(df.index)
+        except AttributeError:
+            LOGGER.error('MISO: Error in source data for ACE %s' % content)
+            return pd.DataFrame()
+        df.index.set_names(['timestamp'], inplace=True)
+        return df
 
     def parse_latest_fuel_mix(self, content):
         # handle bad input
