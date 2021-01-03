@@ -129,10 +129,62 @@ class MISOClient(BaseClient):
         ace = json.loads(response.content)
 
         # return good
-        data = self.parse_ace_dict(ace['ACE'])
+        data = self.parse_ace_data(ace['ACE'])
         return self.serialize_faster(data)
     
-    def parse_ace_dict(self, content):
+    def get_ancillary_market_mcp(self, latest=False, **kwargs):
+        # set up request
+        url = self.base_url + '?messageType=getAncillaryMarketMCP&returnType=json'
+
+        # carry out request
+        response = self.request(url)
+        if not response:
+            return None
+
+        # test for valid content
+        if 'The page cannot be displayed' in response.text:
+            LOGGER.error('MISO: Error in source data for Ancillary Market MCP')
+            return None
+        ammcp = json.loads(response.content)
+
+        # set args
+        self.handle_options(latest=latest, **kwargs)
+
+        # get data
+        if self.options['latest']:
+            data=self.parse_latest_ammcp_data(ammcp)
+        elif self.options['forecast']:
+            data=self.parse_forecast_ammcp_data(ammcp)
+        else:
+            raise ValueError('Either latest or forecast must be True')
+        # return good
+        return self.serialize_faster(data)
+
+
+    def parse_latest_ammcp_data(self, content):
+        if not content:
+            return pd.DataFrame()
+        
+        # add time to each zone.
+        if self.options['latest']:
+            for i in range(0,8):
+                content['MCPData']['RealTimeMCP']['Zone'][i]['time']=content['MCPData']['MktDay'] + " "  + content['MCPData']['RealTimeMCP']['HourAndMin'] + ":00"
+        df = pd.DataFrame(content['MCPData']['RealTimeMCP']['Zone'],columns = ['time','number','GenRegMCP','GenSpinMCP','GenSuppMCP','DemSuppMCP','RegMileageMCP'])
+        df['time']= pd.to_datetime(df['time'])
+        df.set_index('time', inplace = True)
+        # set index
+        try:
+            df.index = self.utcify_index(df.index)
+        except AttributeError:
+            LOGGER.error('MISO: Error in source data for Ancillary Market MCP data %s' % content)
+            return pd.DataFrame()
+        df.index.set_names(['timestamp'], inplace=True)
+
+        return df
+        
+
+
+    def parse_ace_data(self, content):
         if not content:
             return pd.DataFrame()
 
